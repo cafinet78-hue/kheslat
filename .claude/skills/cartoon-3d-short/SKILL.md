@@ -150,6 +150,19 @@ lighting 5-6, ink 6, textures 5-6, characters 7, depth 6-7, composition 6-7 (fro
 - Kenney models go in `shorts/public/bridge/kenney/*.glb` (Nature Kit + Fantasy Town Kit, CC0, names in `KENNEY` in world.ts). kenney.nl is blocked by this environment's network rules, so they are not installed; missing models are skipped and the scene still renders with fewer props.
 - three >= 0.18x removed `PCFSoftShadowMap` and falls back to `PCFShadowMap` (slightly harder shadow edges than the original bridge renders).
 
+### Second short in this repo: "The Bridge That Froze the Thames" (`shorts/src/videos/frost/`, composition `FrostShort`)
+- Story files: `shorts/stories/frost/` (SCRIPT.md with sources, voice/, audio/). Use it as the second template: it shows a
+  new world built on the bridge renderer (stone arch bridges, ice/thaw/dam river shader, floes, booths, seasons).
+- **Timing comes from the words, not from frame numbers**: `voice/words.json` -> `python voice/words_to_ts.py words.json
+  ../../src/videos/frost/words.ts`; story.ts anchors every shot, key, kick and DOF change to word indices (`W.*`), and
+  `audio/frost_sound.py` reads the same words.json. A new voice = regenerate words.ts + re-run the sound, nothing else.
+- No voice yet? `voice/estimate_words.py` writes estimated timings from the script (~3.7 words/s) so the picture and sound
+  can be built first. Real voice: align it with pocketsphinx (bundles an English model; PyPI is reachable).
+- Fast checks: `COMP=FrostShort POST_DPR=0.5 node scripts/bridge-stills.mjs out/frost/x_ <frames> 0.5` (~24 s a still
+  here); low-quality full render: `--scale 0.5 --props='{"post":{"dpr":0.5}}' --concurrency 2` (~2.5 s/frame here).
+- Network in this environment: `assets.vidiq.com` (vidIQ voiceover downloads) and `kenney.nl` are blocked; GitHub
+  release downloads work. Running downloaded TTS binaries was refused by the auto-mode safety check: ask the user first.
+
 ## Gotchas
 - Kenney nature-kit materials are teal: recolour them by material name in build.ts.
 - Cameras end up inside houses: the sight-line culler in build.ts/world.ts removes anything blocking any camera ray.
