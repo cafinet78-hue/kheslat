@@ -6,13 +6,13 @@
 // source; the grade is display-referred, so it comes after tone mapping. Every pixel-sized parameter is specified at
 // 1080x1920 and scaled with the output size, so stills at --scale 0.5 and the 1440x2560 final match.
 // Place changes crossfade by stacking a second canvas for the fade frames; the hook ends on a 4-frame white flash.
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { AbsoluteFill, continueRender, delayRender, getInputProps, useCurrentFrame } from "remotion";
+import { AbsoluteFill, continueRender, delayRender, getInputProps, getRemotionEnvironment, useCurrentFrame, useDelayRender } from "remotion";
 import { ThreeCanvas } from "@remotion/three";
-import { useThree } from "@react-three/fiber";
+import { useFrame, useThree } from "@react-three/fiber";
 import { EffectComposer } from "@react-three/postprocessing";
-import { BlendFunction, BloomEffect, ToneMappingEffect, ToneMappingMode } from "postprocessing";
+import { BlendFunction, BloomEffect, EffectComposer as Composer, ToneMappingEffect, ToneMappingMode } from "postprocessing";
 import { World, loadKit } from "./world";
 import { InkPass, noInkFallback } from "./ink";
 import { LensBlur, GrainEffect } from "./lensblur";
@@ -46,9 +46,34 @@ const useKit = () => {
   return kit;
 };
 
+/** Rendering only: @react-three/postprocessing >= 3.1 builds its composer in an effect, after <ThreeCanvas> has
+ *  already advanced R3F for the frame, so the first frame(s) of a render came out empty (only the page background).
+ *  Hold each frame until the composer has its passes, and draw again if the frame was drawn before that. */
+const useComposerReady = (composer: React.RefObject<Composer | null>, f: number) => {
+  const { advance } = useThree();
+  const { delayRender: hold, continueRender: release } = useDelayRender();
+  const drawn = useRef(-1);
+  const ready = () => (composer.current?.passes.length ?? 0) > 1;
+  useFrame(() => { if (ready()) drawn.current = f; }, 2);
+  useEffect(() => {
+    if (!getRemotionEnvironment().isRendering) return;
+    const h = hold(`post chain ready for frame ${f}`);
+    let raf = 0, tries = 0;
+    const tick = () => {
+      if (!ready() && ++tries < 120) { raf = requestAnimationFrame(tick); return; }
+      if (drawn.current !== f) advance(performance.now());
+      release(h);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => { cancelAnimationFrame(raf); release(h); };
+  }, [f, advance, hold, release]);
+};
+
 const Inner: React.FC<{ id: number; kit: Kit }> = ({ id, kit }) => {
   const f = useCurrentFrame();
   const { camera, scene } = useThree();
+  const composer = useRef<Composer | null>(null);
+  useComposerReady(composer, f);
   const world = useMemo(() => new World(kit), [kit]);
   const target = useMemo(() => new THREE.Vector3(), []);
   const on = useMemo(toggles, []);
@@ -62,7 +87,7 @@ const Inner: React.FC<{ id: number; kit: Kit }> = ({ id, kit }) => {
   }), [camera, scene]);
   useEffect(() => () => fx.ink.dispose(), [fx]);
   const post = useMemo(() => (
-    <EffectComposer multisampling={4}>
+    <EffectComposer ref={composer} multisampling={4}>
       {on.ink ? <primitive object={fx.ink} dispose={null} /> : null}
       {on.lens && on.pre ? <primitive object={fx.lens.pre} dispose={null} /> : null}
       {on.lens ? <primitive object={fx.lens.main} dispose={null} /> : null}

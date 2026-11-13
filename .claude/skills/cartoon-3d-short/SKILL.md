@@ -141,6 +141,15 @@ lighting 5-6, ink 6, textures 5-6, characters 7, depth 6-7, composition 6-7 (fro
 4. **Verify** with a fresh Opus max agent: side-by-side sheets (`python scripts/sbs_sheet.py out.jpg --ours a b --ref r1 r2`), score each area out of 10 (colour day / golden, lighting, ink, textures, characters, depth, composition) plus a numbered fix list with frame numbers. Map each fix to the file owner and resume that owner's agent with SendMessage (keeps its context). Bridge scores: round 1 5/3/4/5/4/7/4/6 → round 2 5/4/5/6/4/7/6/6 → round 3 see notes.
 5. Contracts between owners live in exported constants (e.g. `NOINK` layer from ink.ts, `dofAt`/`FOREGROUND` from story.ts, `LIGHTS`/`LOOK` from lights.ts). Changing a contract means telling every owner that reads it.
 
+## This repo (kheslat) and cloud sessions
+- The Remotion project is `shorts/` at the repo root (`BridgeShort` already registered in `shorts/src/Root.tsx`). Run every command from `shorts/`. Setup: `npm ci` and `pip install numpy scipy pillow`.
+- Cloud containers have no GPU: `remotion.config.ts` and `scripts/bridge-stills.mjs` default to `/opt/pw-browsers/chromium` with `gl: "swangle"` (software WebGL). On a PC with a GPU set `REMOTION_BROWSER=<chrome path>` and `REMOTION_GL=angle`.
+- Software WebGL speed: a still at `--scale 0.5` takes ~35 s (incl. ~20 s first-frame setup), a clip ~14 s/frame at 0.5 with `--concurrency 1`. Higher concurrency starves the tabs and times out. A full 2K render is not practical here (days): do stills and short test clips in the cloud, the final render on a GPU machine.
+- Keep `TMPDIR` short (the default `/tmp` is fine). A long temp path makes Chromium abort with "Socket path too long".
+- `@react-three/postprocessing` >= 3.1 builds its composer in an effect, after `<ThreeCanvas>` has advanced the frame, so renders came out as the bare page background. `Bridge.tsx` has `useComposerReady` to hold each frame until the composer has its passes and redraw it. Keep it in every copy of `Bridge.tsx`.
+- Kenney models go in `shorts/public/bridge/kenney/*.glb` (Nature Kit + Fantasy Town Kit, CC0, names in `KENNEY` in world.ts). kenney.nl is blocked by this environment's network rules, so they are not installed; missing models are skipped and the scene still renders with fewer props.
+- three >= 0.18x removed `PCFSoftShadowMap` and falls back to `PCFShadowMap` (slightly harder shadow edges than the original bridge renders).
+
 ## Gotchas
 - Kenney nature-kit materials are teal: recolour them by material name in build.ts.
 - Cameras end up inside houses: the sight-line culler in build.ts/world.ts removes anything blocking any camera ray.

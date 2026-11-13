@@ -21,6 +21,7 @@ Proven on **The Bridge That Fell for a Song**, a 67 s short about the 1831 Broug
 ## Vendored copy
 This folder is a copy of https://github.com/mromidev/claude-animated-shorts (commit `e3b817b`, MIT, see `LICENSE`), added as a project skill: Claude Code sessions opened on this repo pick it up from `.claude/skills/cartoon-3d-short/` without the install step below.
 - Left out on purpose: `references/frames/` and `references/sheets/` (the reference images are for style study only). Get them from the upstream repo if you need them, and don't commit them here.
+- Changed from upstream: `templates/bridge/Bridge.tsx` waits for the post-processing composer before each frame is captured (otherwise renders are blank with current package versions), and `templates/scripts/bridge-stills.mjs` takes the browser and GL backend from `REMOTION_BROWSER` / `REMOTION_GL` instead of a fixed Windows Chrome path. A ready Remotion project lives in `shorts/` at the repo root.
 
 ## Install
 1. Copy this folder to `~/.claude/skills/cartoon-3d-short/` (clone it there, or download the ZIP).
