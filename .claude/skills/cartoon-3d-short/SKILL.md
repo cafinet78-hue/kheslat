@@ -18,7 +18,7 @@ The style reference is a channel studied privately (`references/`: STYLE_BIBLE.m
 
 User rules that apply:
 - No captions or labels in the video.
-- English only.
+- English only, unless the user asks for Persian. Every Persian voice-over goes through references/PERSIAN_NARRATION.md first (standing user rule).
 - Voice: one steady tone.
 - Jokes are researched real facts.
 - Standard mix: music +3 dB, SFX -6 dB, voice unchanged.
