@@ -13,6 +13,9 @@ NUM = {"1814": "eighteen fourteen", "1831": "eighteen thirty one"}
 def syll(w: str) -> int:
     w = w.lower()
     if w in NUM: return sum(syll(x) for x in NUM[w].split())
+    if re.search(r"[\u0600-\u06FF]", w):  # Persian: ~2.3 letters per syllable (short vowels are not written)
+        n = len(re.sub(r"[^\u0600-\u06FF]", "", w))
+        return max(1, round(n / 2.3))
     w = re.sub(r"[^a-z]", "", w)
     if not w: return 1
     groups = re.findall(r"[aeiouy]+", w)
@@ -25,10 +28,12 @@ items = []  # (word, dur, pause_after)
 for para in [p for p in text.split("\n") if p.strip()]:
     toks = para.split()
     for i, t in enumerate(toks):
-        w = re.sub(r"^[^\w']+|[^\w']+$", "", t)
+        w = re.sub(r"^[^\w'\u200c]+|[^\w'\u200c]+$", "", t)
         pause = 0.0
-        if t.endswith(","): pause = 0.22
-        if t.endswith((".", "!", "?")): pause = 0.45
+        if t.endswith((",", "\u060c")): pause = 0.22
+        if t.endswith(("\u061b", ":")): pause = 0.32
+        if t.endswith((".", "!", "?", "\u061f")): pause = 0.45
+        if t.endswith("..."): pause = 0.55
         if i == len(toks) - 1: pause = max(pause, 0.6)
         items.append([w, 0.06 + 0.155 * syll(w), pause])
 items[-1][2] = 0.0
