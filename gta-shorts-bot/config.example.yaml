@@ -17,7 +17,8 @@ require_game_match: true
 # platform: kick | twitch | youtube
 watch:
   - { platform: kick,    channel: "xqc" }
-  - { platform: twitch,  channel: "summit1g" }
+  - { platform: kick,    channel: "adinross" }
+  - { platform: kick,    channel: "trainwreckstv" }
   # برای یوتیوب هندل کانال رو بنویس:
   # - { platform: youtube, channel: "@SomeChannel" }
 
