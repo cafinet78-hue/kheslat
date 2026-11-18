@@ -7,3 +7,5 @@ venv/
 .venv/
 __pycache__/
 *.pyc
+assets/*
+!assets/README.txt

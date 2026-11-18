@@ -9,9 +9,10 @@ import yaml
 from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parent.parent
+VIDEO_EXT = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"}
 
 DEFAULTS = {
-    "facecam_video": "",
+    "facecam_video": "assets",
     "facecam_volume": 0.0,
     "stream_volume": 1.0,
     "game_keywords": ["gta 6", "gta vi", "gta6", "grand theft auto vi", "grand theft auto 6"],
@@ -25,8 +26,8 @@ DEFAULTS = {
     "analysis_window_minutes": 20,
     "clips_per_window": 2,
     "max_clips_per_stream": 5,
-    "clip_min_seconds": 15,
-    "clip_max_seconds": 55,
+    "clip_min_seconds": 30,
+    "clip_max_seconds": 120,
     "layout": {"top_ratio": 0.6, "gameplay_zoom": 1.0},
     "captions": True,
     "whisper_model": "small",
@@ -59,6 +60,25 @@ class Config(dict):
             p = ROOT / p
         p.mkdir(parents=True, exist_ok=True)
         return p
+
+    def facecams(self) -> list[Path]:
+        """All of the user's own videos: facecam_video may be one file or a folder of videos."""
+        raw = str(self.get("facecam_video") or "").strip()
+        if not raw:
+            return []
+        p = Path(raw).expanduser()
+        if not p.is_absolute():
+            p = ROOT / p
+        if p.is_file():
+            return [p]
+        if p.is_dir():
+            return sorted(f for f in p.iterdir() if f.suffix.lower() in VIDEO_EXT)
+        return []
+
+    def facecam_for(self, n: int) -> Path | None:
+        """Rotate through the user's videos so every clip looks a bit different."""
+        vids = self.facecams()
+        return vids[n % len(vids)] if vids else None
 
 
 def _merge(base: dict, over: dict) -> dict:

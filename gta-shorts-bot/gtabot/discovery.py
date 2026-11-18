@@ -59,8 +59,24 @@ def probe(url: str, timeout: int = 60) -> dict | None:
         log.debug("probe failed for %s: %s", url, e)
         return None
     if data.get("error") or not data.get("streams"):
-        return None
+        return probe_kick_api(url) if "kick.com/" in url else None
     return data.get("metadata") or {}
+
+
+def probe_kick_api(url: str) -> dict | None:
+    """Backup live-check for Kick (if streamlink's Kick support breaks)."""
+    try:
+        from curl_cffi import requests as creq
+        slug = url.rstrip("/").split("/")[-1]
+        j = creq.get(f"https://kick.com/api/v2/channels/{slug}", impersonate="chrome", timeout=20).json()
+        ls = j.get("livestream")
+        if not ls or not ls.get("is_live", True):
+            return None
+        cats = ", ".join(c.get("name", "") for c in ls.get("categories") or [])
+        return {"title": ls.get("session_title", ""), "category": cats, "author": slug}
+    except Exception as e:  # noqa: BLE001
+        log.debug("kick api probe failed: %s", e)
+        return None
 
 
 # --------------------------------------------------------------------------

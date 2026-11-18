@@ -43,10 +43,16 @@ class Recorder:
                 pass
 
     def _run(self) -> None:
-        retries = 0
-        while not self._stop.is_set() and retries < 3:
+        retries, use_ytdlp = 0, False
+        while not self._stop.is_set() and retries < 4:
             part = len(list(self.folder.glob("part*_segments.csv")))
-            self._record_once(part)
+            self._record_once(part, use_ytdlp)
+            csv_file = self.folder / f"part{part:02d}_segments.csv"
+            got = csv_file.exists() and csv_file.stat().st_size > 0
+            if not got:
+                # nothing recorded: switch tool (streamlink <-> yt-dlp) and try again
+                use_ytdlp = not use_ytdlp
+                log.info("Switching recorder to %s for %s", "yt-dlp" if use_ytdlp else "streamlink", self.channel)
             if self._stop.is_set():
                 break
             # streamlink exits when the stream ends OR on a network hiccup: retry a few times
@@ -59,11 +65,15 @@ class Recorder:
         self.finished.set()
         log.info("Recording of %s finished", self.channel)
 
-    def _record_once(self, part: int) -> None:
-        sl_cmd = [sys.executable, "-m", "streamlink", "--stdout", "--retry-open", "3",
-                  self.url, self.quality]
-        if self.platform == "twitch":
-            sl_cmd[4:4] = ["--twitch-disable-ads"]
+    def _record_once(self, part: int, use_ytdlp: bool = False) -> None:
+        if use_ytdlp:
+            sl_cmd = [sys.executable, "-m", "yt_dlp", "-q", "--no-part", "-f",
+                      "best[height<=720]/best", "-o", "-", self.url]
+        else:
+            sl_cmd = [sys.executable, "-m", "streamlink", "--stdout", "--retry-open", "3",
+                      self.url, self.quality]
+            if self.platform == "twitch":
+                sl_cmd[4:4] = ["--twitch-disable-ads"]
         seg_csv = self.folder / f"part{part:02d}_segments.csv"
         ff_cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-i", "pipe:0",
                   "-map", "0:v:0", "-map", "0:a:0?", "-c", "copy",

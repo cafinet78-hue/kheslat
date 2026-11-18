@@ -7,7 +7,6 @@ import json
 import logging
 import shutil
 import sys
-from pathlib import Path
 
 from .config import ROOT, env, load_config
 from .log import setup_logging
@@ -29,8 +28,14 @@ def cmd_setup(_args) -> None:
         v = input(f"{q} [{default}]: ").strip().strip('"')
         return v or default
 
-    base["facecam_video"] = ask("مسیر ویدیوی خودت (فیس‌کم) | Path to YOUR facecam video",
-                                base.get("facecam_video", ""))
+    from .config import Config
+    found = Config({"facecam_video": "assets"}).facecams()
+    if found:
+        print(f"✅ ویدیوی خودت پیدا شد | Your video(s) found in assets: {', '.join(f.name for f in found)}")
+        base["facecam_video"] = "assets"
+    else:
+        print("ویدیوی خودت رو بذار توی پوشه assets (یا مسیرش رو اینجا بنویس)")
+        base["facecam_video"] = ask("Path to YOUR video (or folder)", base.get("facecam_video", "assets"))
     print("استریمرها رو به شکل platform:channel وارد کن، با کاما جدا کن. مثال: kick:xqc, twitch:summit1g, youtube:@name")
     current = ", ".join(f"{w['platform']}:{w['channel']}" for w in base.get("watch") or [])
     raw = ask("Streamers", current)
@@ -78,8 +83,14 @@ def cmd_doctor(_args) -> None:
     except Exception:  # noqa: BLE001
         check("faster_whisper (captions)", False, "optional: pip install faster-whisper")
     check("config.yaml", (ROOT / "config.yaml").exists(), "python -m gtabot setup")
-    face = cfg.facecam_video
-    check(f"facecam video ({face})", face and Path(face).exists(), "set facecam_video in config.yaml")
+    faces = cfg.facecams()
+    check(f"your video(s): {', '.join(f.name for f in faces) or 'none'}", faces,
+          "put your video (mp4) in the 'assets' folder")
+    for f in faces:
+        from .media import duration, has_audio
+        d = duration(f)
+        check(f"  {f.name} readable ({d:.0f}s{', has audio' if has_audio(f) else ''})", d > 0,
+              "file is broken or not a video")
     check("ANTHROPIC_API_KEY", env("ANTHROPIC_API_KEY"), "add it to .env (optional but recommended)")
     check("client_secret.json (YouTube)", (ROOT / "client_secret.json").exists(), "see README step 4")
     from . import youtube

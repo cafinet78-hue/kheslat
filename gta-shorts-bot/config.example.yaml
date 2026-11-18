@@ -4,7 +4,7 @@
 # ============================================================
 
 # ویدیوی خودت (فیس‌کم / ری‌اکشن) که پایین شورت‌ها قرار می‌گیره
-facecam_video: "C:/Users/YOU/Videos/my_facecam.mp4"
+facecam_video: "assets"     # پوشه assets: ویدیو(های) خودت رو اونجا بذار. یا مسیر یک فایل
 facecam_volume: 0.0        # 0 = بی‌صدا، 1 = صدای کامل ویدیوی خودت
 stream_volume: 1.0          # صدای استریم
 
@@ -37,8 +37,8 @@ stream_quality: "720p60,720p,best"
 analysis_window_minutes: 20  # هر ۲۰ دقیقه از استریم یک‌بار تحلیل می‌شه
 clips_per_window: 2
 max_clips_per_stream: 5      # حداکثر شورت از هر استریم
-clip_min_seconds: 15
-clip_max_seconds: 55
+clip_min_seconds: 30         # شورت‌های یوتیوب تا ۳ دقیقه مجازن
+clip_max_seconds: 120
 
 # ---- ادیت ----
 layout:

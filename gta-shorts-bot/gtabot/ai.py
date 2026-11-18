@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import random
 import json
 import logging
 from pathlib import Path
@@ -11,6 +12,17 @@ from pydantic import BaseModel, Field
 from .config import Config, env
 
 log = logging.getLogger("claude")
+
+
+# used only when no ANTHROPIC_API_KEY is set
+FALLBACK_TITLES = [
+    "{s} did NOT expect this in GTA 6 😳", "GTA 6 is actually insane 🤯 ({s})",
+    "This GTA 6 moment broke {s} 😂", "{s} vs the cops in GTA 6 🚔",
+    "Nobody talks about this in GTA 6... 👀", "{s}'s craziest GTA 6 moment 🔥",
+    "GTA 6 physics are unreal 😂 ({s})", "Wait for it... GTA 6 edition 💀",
+]
+FALLBACK_HOOKS = ["WAIT FOR IT...", "HE DIDN'T EXPECT THIS", "GTA 6 IS INSANE", "WATCH TILL THE END",
+                  "NO WAY THIS HAPPENED"]
 
 
 class ClipChoice(BaseModel):
@@ -95,6 +107,7 @@ class AI:
             content.append({"type": "text", "text": json.dumps({
                 "candidate_id": c["id"], "start": round(c["start"], 1), "end": round(c["end"], 1),
                 "excitement_score": round(c["score"], 2),
+                "louder_than_usual_db": c.get("loud_gain_db"), "chat_activity_x": c.get("chat_ratio"),
                 "speech": c.get("transcript", "")[:1500],
                 "chat_messages": c.get("chat", [])[:40]}, ensure_ascii=False)})
             for fp in c.get("frames", [])[:3]:
@@ -122,12 +135,15 @@ class AI:
 
     def _fallback(self, candidates, streamer, max_clips):
         out = []
-        good = [c for c in candidates if c["score"] >= 1.0]  # only clear loudness/chat spikes
+        cmax = self.cfg.clip_max_seconds
+        good = [c for c in candidates if c.get("hype", c["score"] >= 1.0)]  # only clear spikes
         for c in sorted(good, key=lambda x: -x["score"])[:max_clips]:
-            out.append({"candidate_id": c["id"], "start": c["start"], "end": c["end"],
+            s = max(c["start"], c.get("peak", c["start"]) - cmax * 0.6)
+            e = min(c["end"], s + cmax)
+            out.append({"candidate_id": c["id"], "start": s, "end": e,
                         "virality": 5, "score": c["score"],
-                        "title": f"{streamer} in GTA 6 be like... 😂 #shorts",
-                        "hook_text": "WAIT FOR IT...",
+                        "title": random.choice(FALLBACK_TITLES).format(s=streamer),
+                        "hook_text": random.choice(FALLBACK_HOOKS),
                         "description": f"Crazy GTA 6 moment from {streamer}'s stream.",
                         "hashtags": ["gta6", "gtavi", "gta", "gaming", "shorts", "funny"],
                         "thumbnail_text": "GTA 6 IS INSANE"})

@@ -59,7 +59,7 @@ def _draw_text(img: Image.Image, text: str, box_w: int, y: int, size: int, x_cen
                fill=colors[i % 2], stroke_width=max(4, size_now // 12), stroke_fill=(0, 0, 0))
 
 
-def make_thumbnail(src_video: Path, t: float, text: str, out: Path, facecam: str | None,
+def make_thumbnail(src_video: Path, t: float, text: str, out: Path, facecam: Path | str | None,
                    vertical: bool = False) -> Path | None:
     tw, th = (1080, 1920) if vertical else (1280, 720)
     try:

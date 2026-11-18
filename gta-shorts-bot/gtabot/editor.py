@@ -73,13 +73,12 @@ def build_ass(path: Path, words: list[dict], clip_start: float, clip_dur: float,
 
 
 def render_short(cfg: Config, src: Path, start: float, end: float, out: Path, words: list[dict],
-                 hook: str, credit: str, facecam_offset: float = 0.0) -> Path:
+                 hook: str, credit: str, face: Path | None = None, facecam_offset: float = 0.0) -> Path:
     dur = end - start
     top_h = int(H * float(cfg.layout.get("top_ratio", 0.6))) // 2 * 2
     bot_h = H - top_h
     zoom = float(cfg.layout.get("gameplay_zoom", 1.0))
     ass = build_ass(out.with_suffix(".ass"), words, start, dur, hook, credit, top_h, cfg.captions)
-    face = Path(cfg.facecam_video) if cfg.facecam_video else None
     use_face = bool(face and face.exists())
     inputs = ["-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(Path(src).resolve())]
     if use_face:
@@ -104,11 +103,10 @@ def render_short(cfg: Config, src: Path, start: float, end: float, out: Path, wo
 
 
 def render_wide(cfg: Config, src: Path, start: float, end: float, out: Path, credit: str,
-                facecam_offset: float = 0.0) -> Path:
+                face: Path | None = None, facecam_offset: float = 0.0) -> Path:
     """16:9 version of a clip (for the long compilation), facecam in the corner."""
     dur = end - start
     ass = build_ass(out.with_suffix(".ass"), [], start, dur, "", credit, 1080, False, (1920, 1080))
-    face = Path(cfg.facecam_video) if cfg.facecam_video else None
     use_face = bool(face and face.exists() and cfg.long_video.get("facecam_corner", True))
     inputs = ["-ss", f"{start:.2f}", "-t", f"{dur:.2f}", "-i", str(Path(src).resolve())]
     base = ("[0:v]scale=1920:1080:force_original_aspect_ratio=decrease,"
@@ -142,5 +140,6 @@ def chapters_text(starts: list[float], titles: list[str]) -> str:
     for i, s in enumerate(starts):
         s = 0 if i == 0 else s
         title = titles[i] if i < len(titles) else f"Moment {i + 1}"
+        title = " ".join(w for w in title.split() if not w.startswith("#")) or f"Moment {i + 1}"
         rows.append(f"{int(s // 60):d}:{int(s % 60):02d} {title}")
     return "\n".join(rows)

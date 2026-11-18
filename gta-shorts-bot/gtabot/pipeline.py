@@ -30,7 +30,9 @@ def _z(x: np.ndarray) -> np.ndarray:
 def _smooth(x: np.ndarray, k: int) -> np.ndarray:
     if len(x) < k:
         return x
-    return np.convolve(x, np.ones(k) / k, mode="same")
+    # pad with edge values (zero-padding would create fake peaks at the window edges)
+    xp = np.pad(x, (k // 2, k - 1 - k // 2), mode="edge")
+    return np.convolve(xp, np.ones(k) / k, mode="valid")
 
 
 def _load_chat(folder: Path) -> list[tuple[float, str]]:
@@ -75,7 +77,13 @@ def find_candidates(cfg: Config, window: Path, win_start: float, chat: list, n: 
         if e - s < cfg.clip_min_seconds:
             continue
         msgs = [m for t, m in chat if s <= t - win_start <= e + CHAT_DELAY]
-        cands.append({"id": k, "start": s, "end": e, "peak": p, "score": float(score[p]), "chat": msgs})
+        loud_gain = float(loud_s[p] - np.median(loud_s))
+        lo, hi = max(0, p - 10), min(length, p + 10)
+        chat_ratio = float(counts[lo:hi].mean() / counts.mean()) if counts.sum() > 20 else 0.0
+        cands.append({"id": k, "start": s, "end": e, "peak": p, "score": float(score[p]), "chat": msgs,
+                      "loud_gain_db": round(loud_gain, 1), "chat_ratio": round(chat_ratio, 1),
+                      # a real "moment": clearly louder than usual or chat exploding
+                      "hype": loud_gain >= 6 or chat_ratio >= 3})
     return cands
 
 
@@ -91,10 +99,17 @@ def process_window(cfg: Config, db: DB, ai: AI, rec, segs: list, final: bool) ->
             made = _make_clips(cfg, db, ai, rec, window, t0, min(remaining, cfg.clips_per_window))
         finally:
             window.unlink(missing_ok=True)
+    # Keep the last ~clip_max seconds for the next window, so a moment that happens right at the
+    # border is not cut in half (duplicates are filtered in _make_clips).
+    keep = [] if final else [s for s in segs if s[1] >= t1 - cfg.clip_max_seconds]
+    if len(keep) >= len(segs):
+        keep = []
+    done = segs[: len(segs) - len(keep)]
     if not cfg.keep_raw_recordings:
-        for s in segs:
+        for s in done:
             Path(s[0]).unlink(missing_ok=True)
-    db.x("UPDATE recordings SET processed_until=? WHERE id=?", (t1, rec["id"]))
+    next_start = keep[0][1] if keep else t1
+    db.x("UPDATE recordings SET processed_until=? WHERE id=?", (next_start, rec["id"]))
     log.info("[%s] analysed %d-%ds of stream -> %d new clip(s)", rec["channel"], t0, t1, made)
     return made
 
@@ -102,6 +117,11 @@ def process_window(cfg: Config, db: DB, ai: AI, rec, segs: list, final: bool) ->
 def _make_clips(cfg, db, ai, rec, window: Path, t0: float, max_clips: int) -> int:
     folder = Path(rec["folder"])
     cands = find_candidates(cfg, window, t0, _load_chat(folder), n=min(8, max_clips * 3 + 1))
+    # drop moments we already clipped (windows overlap a little)
+    done = [(r["start"] - t0, r["end"] - t0) for r in
+            db.q("SELECT start, end FROM clips WHERE recording_id=?", (rec["id"],))]
+    cands = [c for c in cands if not any(min(c["end"], e) - max(c["start"], s) > 0.3 * (c["end"] - c["start"])
+                                         or s <= c["peak"] <= e for s, e in done)]
     if not cands:
         return 0
     fdir = folder / "frames"
@@ -127,16 +147,17 @@ def _make_clips(cfg, db, ai, rec, window: Path, t0: float, max_clips: int) -> in
         n = db.q("SELECT COUNT(*) c FROM clips")[0]["c"] + 1
         base = out_dir / f"short_{n:04d}"
         words = by_id.get(p["candidate_id"], {}).get("words", [])
+        face = cfg.facecam_for(n)
         try:
             short = editor.render_short(cfg, window, p["start"], p["end"], base.with_suffix(".mp4"),
-                                        words, p.get("hook_text", ""), credit, facecam_offset=n * 37)
+                                        words, p.get("hook_text", ""), credit, face, facecam_offset=n * 37)
             wide = None
             if cfg.long_video.get("enabled"):
                 wide = editor.render_wide(cfg, window, p["start"], p["end"],
-                                          out_dir / f"wide_{n:04d}.mp4", credit, facecam_offset=n * 37)
+                                          out_dir / f"wide_{n:04d}.mp4", credit, face, facecam_offset=n * 37)
             mid = (p["start"] + p["end"]) / 2
             thumb = make_thumbnail(window, mid, p.get("thumbnail_text", ""), base.with_suffix(".jpg"),
-                                   cfg.facecam_video, vertical=True)
+                                   face, vertical=True)
             # keep a frame for the long-video thumbnail
             frame(window, mid, out_dir / f"frame_{n:04d}.jpg", 1920)
         except Exception as e:  # noqa: BLE001
@@ -154,12 +175,17 @@ def tick_processing(cfg: Config, db: DB, ai: AI, active_ids: set[int]) -> None:
     """Analyse any recording that has enough new footage."""
     win = cfg.analysis_window_minutes * 60
     for rec in db.q("SELECT * FROM recordings WHERE status IN ('recording','ended')"):
-        segs = [s for s in list_segments(Path(rec["folder"])) if s[1] >= rec["processed_until"] - 0.5]
         is_live = rec["id"] in active_ids and rec["status"] == "recording"
+
+        def pending():
+            until = db.q("SELECT processed_until p FROM recordings WHERE id=?", (rec["id"],))[0]["p"]
+            return [s for s in list_segments(Path(rec["folder"])) if s[1] >= until - 0.5]
+
+        segs = pending()
         while segs and segs[-1][2] - segs[0][1] >= win:
             batch = [s for s in segs if s[2] - segs[0][1] <= win + 1] or segs[:1]
             process_window(cfg, db, ai, rec, batch, final=False)
-            segs = segs[len(batch):]
+            segs = pending()
         if is_live:
             continue
         # stream is over: analyse the rest, then build the long video
@@ -183,7 +209,7 @@ def build_long_for(cfg: Config, db: DB, ai: AI, rec) -> None:
     meta = ai.long_video_meta(rec["channel"], metas)
     best = max(range(len(clips)), key=lambda i: clips[i]["score"])
     thumb = make_thumbnail(out, starts[best] + 2, meta.get("thumbnail_text", ""),
-                           out_dir / "long_thumb.jpg", cfg.facecam_video, vertical=False)
+                           out_dir / "long_thumb.jpg", cfg.facecam_for(0), vertical=False)
     meta["chapters"] = editor.chapters_text(starts, meta.get("chapter_titles", []))
     meta.update(streamer=rec["channel"], platform=rec["platform"], url=rec["url"])
     db.x("INSERT INTO long_videos(recording_id,path,thumb_path,meta,created_at) VALUES(?,?,?,?,?)",
