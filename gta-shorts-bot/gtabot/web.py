@@ -20,7 +20,7 @@ from .config import ROOT, VIDEO_EXT, env, load_config
 log = logging.getLogger("web")
 
 STATE_FILE = ROOT / "data" / "panel.json"
-SECRET_KEYS = ["ANTHROPIC_API_KEY", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET", "KICK_CLIENT_ID", "KICK_CLIENT_SECRET"]
+SECRET_KEYS = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN", "TWITCH_CLIENT_ID", "TWITCH_CLIENT_SECRET", "KICK_CLIENT_ID", "KICK_CLIENT_SECRET"]
 
 
 class Panel:
@@ -162,7 +162,7 @@ class Panel:
             "checks": {
                 "ffmpeg": bool(shutil.which("ffmpeg")),
                 "facecams": [f.name for f in cfg.facecams()],
-                "claude": bool(env("ANTHROPIC_API_KEY")),
+                "claude": bool(env("ANTHROPIC_API_KEY") or env("CLAUDE_CODE_OAUTH_TOKEN")),
                 "client_secret": youtube.CLIENT_SECRET.exists(),
                 "youtube": youtube.is_ready(),
             },
@@ -422,8 +422,10 @@ a{color:var(--acc)}
     <div><label>نمایش در یوتیوب</label><select id="privacy"><option value="public">Public</option><option value="unlisted">Unlisted</option><option value="private">Private</option></select></div>
   </div>
   <div class="chk"><input type="checkbox" id="ytEnabled"><span>آپلود خودکار روی یوتیوب</span></div>
-  <label>کلید Claude (ANTHROPIC_API_KEY) <span id="k_ANTHROPIC_API_KEY"></span></label>
-  <input id="key_ANTHROPIC_API_KEY" type="password" placeholder="sk-ant-...">
+  <label>توکن اشتراک Claude Pro (CLAUDE_CODE_OAUTH_TOKEN) <span id="k_CLAUDE_CODE_OAUTH_TOKEN"></span></label>
+  <input id="key_CLAUDE_CODE_OAUTH_TOKEN" type="password" placeholder="sk-ant-oat01-...">
+  <label>یا کلید API (ANTHROPIC_API_KEY) <span id="k_ANTHROPIC_API_KEY"></span></label>
+  <input id="key_ANTHROPIC_API_KEY" type="password" placeholder="sk-ant-api...">
   <details style="margin-top:8px"><summary class="mute">کلیدهای اختیاری توییچ و کیک</summary>
     <label>TWITCH_CLIENT_ID <span id="k_TWITCH_CLIENT_ID"></span></label><input id="key_TWITCH_CLIENT_ID" type="password">
     <label>TWITCH_CLIENT_SECRET <span id="k_TWITCH_CLIENT_SECRET"></span></label><input id="key_TWITCH_CLIENT_SECRET" type="password">
@@ -472,7 +474,7 @@ async function refresh(){
   const c=S.checks, it=(ok,t,h)=>`<li class="${ok?'ok':'bad'}">${ok?'✅':'❌'} ${t}${ok||!h?'':' <span class="mute">('+h+')</span>'}</li>`;
   $('checks').innerHTML=it(c.ffmpeg,'FFmpeg نصبه','باید نصب بشه')+
     it(c.facecams.length,'ویدیوی خودت','بخش پایین، آپلود کن')+
-    it(c.claude,'کلید Claude','توی تنظیمات وارد کن، اختیاری ولی خیلی بهتره')+
+    it(c.claude,'Claude وصله','اختیاری ولی خیلی بهتره: bash claude.sh')+
     it(c.client_secret,'فایل client_secret.json','بخش یوتیوب')+
     it(c.youtube,'یوتیوب وصله','بخش یوتیوب');
   $('faces').innerHTML=c.facecams.length?('ویدیوهای فعلی: '+c.facecams.map(f=>`${esc(f)} <a href="#" onclick="delFace('${esc(f)}');return false">حذف</a>`).join('، ')):'هنوز ویدیویی نذاشتی.';
@@ -506,7 +508,7 @@ async function delFace(n){ if(confirm('حذف '+n+'؟')){ await api('/api/delete
 async function ytStart(){ try{ const j=await api('/api/yt/url'); $('ytStep').style.display='block'; window.open(j.url,'_blank'); }catch(e){ alert(e.message) } }
 async function ytFinish(){ $('ytMsg').textContent='...'; try{ const j=await api('/api/yt/finish',{pasted:$('ytPaste').value}); $('ytMsg').textContent='✅ وصل شد: '+j.channel; refresh(); }catch(e){ $('ytMsg').textContent='❌ '+e.message } }
 async function saveSettings(){
-  const keys={}; for(const k of ['ANTHROPIC_API_KEY','TWITCH_CLIENT_ID','TWITCH_CLIENT_SECRET','KICK_CLIENT_ID','KICK_CLIENT_SECRET']){ keys[k]=$('key_'+k).value; $('key_'+k).value=''; }
+  const keys={}; for(const k of ['ANTHROPIC_API_KEY','CLAUDE_CODE_OAUTH_TOKEN','TWITCH_CLIENT_ID','TWITCH_CLIENT_SECRET','KICK_CLIENT_ID','KICK_CLIENT_SECRET']){ keys[k]=$('key_'+k).value; $('key_'+k).value=''; }
   try{ await api('/api/settings',{streamers:$('streamers').value, discover_youtube:$('d_youtube').checked, discover_twitch:$('d_twitch').checked,
     discover_kick:$('d_kick').checked, max_clips_per_stream:$('maxclips').value, facecam_volume:$('facevol').value,
     content_language:$('lang').value, privacy:$('privacy').value, youtube_enabled:$('ytEnabled').checked, keys});

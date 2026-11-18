@@ -79,6 +79,7 @@
 | چی | از کجا | لازمه؟ |
 |---|---|---|
 | **ویدیوی خودت** (فیس‌کم / ری‌اکشن) | بذارش توی پوشه `assets`. اگه از کلیپ کوتاه‌تر باشه تکرار می‌شه | بله |
+| **اشتراک Claude Pro/Max** | توی ترمینال Codespace بزن `bash claude.sh` و با اکانت Pro وارد شو (خودش وصل می‌کنه) | به جای کلید API |
 | **کلید Claude** (`ANTHROPIC_API_KEY`) | [console.anthropic.com](https://console.anthropic.com) ← API Keys | خیلی توصیه می‌شه (بدونش تایتل‌ها ساده می‌شن) |
 | **client_secret.json** (یوتیوب) | مراحل پایین | برای آپلود خودکار |
 | Twitch Client ID/Secret | [dev.twitch.tv/console](https://dev.twitch.tv/console) | اختیاری: پیدا کردن خودکار استریمرهای توییچ |

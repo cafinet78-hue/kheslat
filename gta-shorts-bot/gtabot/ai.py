@@ -2,7 +2,10 @@
 from __future__ import annotations
 
 import base64
+import os
 import random
+import shutil
+import subprocess
 import json
 import logging
 from pathlib import Path
@@ -59,21 +62,95 @@ and anything sexual, hateful or showing private info. Each clip must start right
 (hook in the first 2 seconds) and end on the payoff. Never invent things that did not happen."""
 
 
+def claude_cli() -> str | None:
+    found = shutil.which("claude")
+    if found:
+        return found
+    for p in (Path.home() / ".local/bin/claude", Path.home() / ".claude/local/claude"):
+        if p.exists():
+            return str(p)
+    return None
+
+
+def _inline_schema(schema: dict) -> dict:
+    """Resolve $ref/$defs so the schema is self-contained."""
+    defs = schema.pop("$defs", {})
+
+    def walk(x):
+        if isinstance(x, dict):
+            if "$ref" in x:
+                return walk(dict(defs[x["$ref"].split("/")[-1]]))
+            return {k: walk(v) for k, v in x.items()}
+        if isinstance(x, list):
+            return [walk(v) for v in x]
+        return x
+    return walk(schema)
+
+
 class AI:
     def __init__(self, cfg: Config):
         self.cfg = cfg
-        self.enabled = bool(env("ANTHROPIC_API_KEY"))
         self.client = None
-        if self.enabled:
+        self.cli = None
+        self.mode = ""
+        if env("ANTHROPIC_API_KEY"):
             import anthropic
             self.client = anthropic.Anthropic()
+            self.mode = "api"
+        elif env("CLAUDE_CODE_OAUTH_TOKEN") and claude_cli():
+            # Claude Pro/Max subscription through Claude Code (token from `claude setup-token`)
+            self.cli = claude_cli()
+            self.mode = "cli"
+            log.info("Using your Claude subscription through Claude Code")
         else:
-            log.warning("ANTHROPIC_API_KEY not set - using simple automatic titles instead of Claude")
+            log.warning("No Claude key/token - using simple automatic titles instead of Claude")
+        self.enabled = bool(self.mode)
 
     def _system(self) -> str:
         return SYSTEM.format(style=self.cfg.channel_style, lang=self.cfg.content_language)
 
+    def _image(self, path) -> dict:
+        if self.mode == "cli":
+            return {"type": "image_path", "path": str(Path(path).resolve())}
+        return {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                            "data": base64.b64encode(Path(path).read_bytes()).decode()}}
+
     def _parse(self, content: list, schema):
+        if self.mode == "cli":
+            return self._parse_cli(content, schema)
+        return self._parse_api(content, schema)
+
+    def _parse_cli(self, content: list, schema):
+        """Same request, sent through the Claude Code CLI (uses the user's subscription)."""
+        texts, images = [], []
+        for c in content:
+            if c["type"] == "text":
+                texts.append(c["text"])
+            elif c["type"] == "image_path":
+                images.append(c["path"])
+                texts.append(f"[frame image of the candidate above: {c['path']}]")
+        prompt = "\n\n".join(texts)
+        if images:
+            prompt += ("\n\nOpen each frame image listed above with the Read tool before deciding. "
+                       "Do not use any other tools.")
+        cmd = [self.cli, "-p", "--output-format", "json",
+               "--json-schema", json.dumps(_inline_schema(schema.model_json_schema())),
+               "--append-system-prompt", self._system(), "--allowedTools", "Read"]
+        dirs = sorted({str(Path(i).parent) for i in images})
+        if dirs:
+            cmd += ["--add-dir", *dirs]
+        sub_env = {k: v for k, v in os.environ.items() if not (k == "ANTHROPIC_API_KEY" and not v)}
+        r = subprocess.run(cmd, input=prompt, capture_output=True, text=True, timeout=900, env=sub_env,
+                           encoding="utf-8", errors="replace", cwd=dirs[0] if dirs else None)
+        try:
+            out = json.loads(r.stdout)
+        except json.JSONDecodeError as e:
+            raise RuntimeError(f"Claude Code failed: {(r.stderr or r.stdout)[-500:]}") from e
+        if out.get("is_error") or not out.get("structured_output"):
+            raise RuntimeError(f"Claude Code returned no result: {str(out.get('result'))[:300]}")
+        return schema.model_validate(out["structured_output"])
+
+    def _parse_api(self, content: list, schema):
         """Structured-output request with server-side refusal fallback."""
         resp = self.client.beta.messages.parse(
             model=self.cfg.claude_model,
@@ -110,10 +187,11 @@ class AI:
                 "louder_than_usual_db": c.get("loud_gain_db"), "chat_activity_x": c.get("chat_ratio"),
                 "speech": c.get("transcript", "")[:1500],
                 "chat_messages": c.get("chat", [])[:40]}, ensure_ascii=False)})
-            for fp in c.get("frames", [])[:3]:
-                content.append({"type": "image", "source": {
-                    "type": "base64", "media_type": "image/jpeg",
-                    "data": base64.b64encode(Path(fp).read_bytes()).decode()}})
+            frames = c.get("frames", [])
+            if self.mode == "cli":  # save subscription usage: one frame per candidate
+                frames = frames[1:2] or frames[:1]
+            for fp in frames[:3]:
+                content.append(self._image(fp))
         try:
             sel = self._parse(content, ClipSelection)
         except Exception as e:  # noqa: BLE001
