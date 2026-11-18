@@ -1,0 +1,74 @@
+# ============================================================
+#  GTA VI Shorts Bot - تنظیمات
+#  این فایل رو کپی کن به config.yaml (یا دستور setup رو بزن)
+# ============================================================
+
+# ویدیوی خودت (فیس‌کم / ری‌اکشن) که پایین شورت‌ها قرار می‌گیره
+facecam_video: "C:/Users/YOU/Videos/my_facecam.mp4"
+facecam_volume: 0.0        # 0 = بی‌صدا، 1 = صدای کامل ویدیوی خودت
+stream_volume: 1.0          # صدای استریم
+
+# کلمات کلیدی برای تشخیص اینکه استریمر داره GTA VI بازی می‌کنه
+game_keywords: ["gta 6", "gta vi", "gta6", "grand theft auto vi", "grand theft auto 6"]
+# اگه true باشه فقط وقتی ضبط می‌کنه که عنوان/دسته‌بندی استریم GTA VI باشه
+require_game_match: true
+
+# ---- استریمرهایی که دنبالشون می‌کنی (هر وقت لایو شدن ضبط می‌شه) ----
+# platform: kick | twitch | youtube
+watch:
+  - { platform: kick,    channel: "xqc" }
+  - { platform: twitch,  channel: "summit1g" }
+  # برای یوتیوب هندل کانال رو بنویس:
+  # - { platform: youtube, channel: "@SomeChannel" }
+
+# ---- پیدا کردن خودکار استریمرهای GTA VI (پربیننده‌ترین‌ها) ----
+auto_discover:
+  youtube: true     # بدون کلید کار می‌کنه
+  twitch: false     # نیاز به TWITCH_CLIENT_ID / SECRET در .env
+  kick: false       # نیاز به KICK_CLIENT_ID / SECRET در .env
+  min_viewers: 300
+  languages: []     # مثلا ["en"] - خالی = همه زبان‌ها
+
+max_parallel_recordings: 2   # چند استریم هم‌زمان ضبط بشه (به سرعت اینترنت و CPU بستگی داره)
+check_interval_minutes: 5    # هر چند دقیقه دنبال استریم لایو بگرده
+stream_quality: "720p60,720p,best"
+
+# ---- انتخاب کلیپ‌ها ----
+analysis_window_minutes: 20  # هر ۲۰ دقیقه از استریم یک‌بار تحلیل می‌شه
+clips_per_window: 2
+max_clips_per_stream: 5      # حداکثر شورت از هر استریم
+clip_min_seconds: 15
+clip_max_seconds: 55
+
+# ---- ادیت ----
+layout:
+  top_ratio: 0.6             # ۶۰٪ بالای صفحه گیم‌پلی، ۴۰٪ پایین ویدیوی خودت
+  gameplay_zoom: 1.0         # بیشتر از ۱ = زوم روی وسط تصویر بازی
+captions: true               # زیرنویس خودکار با Whisper
+whisper_model: "small"       # tiny | base | small | medium (بزرگ‌تر = دقیق‌تر و کندتر)
+show_credit: true            # اسم استریمر روی ویدیو (برای رعایت حق کپی‌رایت مهمه)
+
+# ---- هوش مصنوعی (Claude) ----
+claude_model: "claude-opus-5-5"
+content_language: "English"  # زبان تایتل و توضیحات (مثلا English یا Persian)
+channel_style: "High energy GTA 6 clips, funny moments, crazy stunts, police chases"
+
+# ---- ویدیوی بلند ----
+long_video:
+  enabled: true
+  min_clips: 4               # وقتی استریم تموم شد و حداقل ۴ کلیپ داشت، یه ویدیوی بلند (Compilation) می‌سازه
+  facecam_corner: true
+
+# ---- آپلود یوتیوب ----
+youtube:
+  enabled: true
+  privacy: "public"          # public | unlisted | private
+  max_uploads_per_day: 6     # سهمیه پیش‌فرض API یوتیوب تقریبا ۶ آپلود در روزه
+  min_gap_minutes: 60        # فاصله بین آپلودها
+  category_id: "20"          # 20 = Gaming
+  made_for_kids: false
+  extra_tags: ["GTA 6", "GTA VI", "GTA 6 gameplay", "shorts"]
+
+# پوشه ذخیره ویدیوها
+data_dir: "data"
+keep_raw_recordings: false   # بعد از تحلیل، فایل خام استریم پاک بشه تا هارد پر نشه
