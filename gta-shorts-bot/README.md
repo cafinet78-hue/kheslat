@@ -37,8 +37,8 @@
 ۲. دکمه سبز **Code** ← تب **Codespaces** ← سه‌نقطه (**…**) ← **New with options**.
 ۳. این‌ها رو انتخاب کن:
    - **Branch:** همون برنچی که برنامه روشه
-   - **Dev container configuration:** ‏**GTA 6 Shorts Bot** (اون یکی، «ghtun»، مال فیلترشکنه؛ اونو انتخاب نکن)
-   - **Machine type:** ‏2-core
+   - **Dev container configuration:** **GTA 6 Shorts Bot** (اون یکی، «ghtun»، مال فیلترشکنه؛ اونو انتخاب نکن)
+   - **Machine type:** 2-core
 ۴. **Create codespace** رو بزن و حدود ۵ تا ۱۰ دقیقه صبر کن تا همه چیز خودکار نصب بشه.
 ۵. پایین صفحه تب **PORTS** رو باز کن. جلوی پورت **8080 (Control Panel)** روی آیکون 🌐 بزن. **پنل کنترل** باز می‌شه. این صفحه رو بوکمارک کن.
 
