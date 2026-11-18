@@ -80,7 +80,7 @@ def make_thumbnail(src_video: Path, t: float, text: str, out: Path, facecam: Pat
                 fp2 = frame(Path(facecam), ft, Path(td) / "f.jpg", width=1280)
                 if fp2:
                     fw, fh = (int(tw * 0.9), int(th * 0.33)) if vertical else (int(tw * 0.38), int(th * 0.62))
-                    face = ImageOps.fit(Image.open(fp2).convert("RGB"), (fw, fh))
+                    face = ImageOps.fit(Image.open(fp2).convert("RGB"), (fw, fh), centering=(0.5, 0.25))
                     face = ImageOps.expand(face, border=8, fill=(255, 230, 0))
                     pos = ((tw - face.width) // 2, th - face.height - 60) if vertical else \
                           (tw - face.width - 25, th - face.height - 25)

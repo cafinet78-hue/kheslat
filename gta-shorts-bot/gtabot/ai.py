@@ -66,7 +66,8 @@ def claude_cli() -> str | None:
     found = shutil.which("claude")
     if found:
         return found
-    for p in (Path.home() / ".local/bin/claude", Path.home() / ".claude/local/claude"):
+    for p in (Path.home() / ".local/bin/claude", Path.home() / ".local/bin/claude.exe",
+              Path.home() / ".claude/local/claude"):
         if p.exists():
             return str(p)
     return None
@@ -216,8 +217,9 @@ class AI:
         cmax = self.cfg.clip_max_seconds
         good = [c for c in candidates if c.get("hype", c["score"] >= 1.0)]  # only clear spikes
         for c in sorted(good, key=lambda x: -x["score"])[:max_clips]:
-            s = max(c["start"], c.get("peak", c["start"]) - cmax * 0.6)
-            e = min(c["end"], s + cmax)
+            length = max(self.cfg.clip_min_seconds, min(cmax, 60))  # ~1 minute around the moment
+            s = max(c["start"], c.get("peak", c["start"]) - length * 0.65)
+            e = min(c["end"], s + length)
             out.append({"candidate_id": c["id"], "start": s, "end": e,
                         "virality": 5, "score": c["score"],
                         "title": random.choice(FALLBACK_TITLES).format(s=streamer),

@@ -36,7 +36,7 @@ stream_quality: "720p60,720p,best"
 
 # ---- انتخاب کلیپ‌ها ----
 analysis_window_minutes: 20  # هر ۲۰ دقیقه از استریم یک‌بار تحلیل می‌شه
-clips_per_window: 2
+clips_per_window: 3
 max_clips_per_stream: 5      # حداکثر شورت از هر استریم
 clip_min_seconds: 30         # شورت‌های یوتیوب تا ۳ دقیقه مجازن
 clip_max_seconds: 120
@@ -46,7 +46,7 @@ layout:
   top_ratio: 0.6             # ۶۰٪ بالای صفحه گیم‌پلی، ۴۰٪ پایین ویدیوی خودت
   gameplay_zoom: 1.0         # بیشتر از ۱ = زوم روی وسط تصویر بازی
 captions: true               # زیرنویس خودکار با Whisper
-whisper_model: "small"       # tiny | base | small | medium (بزرگ‌تر = دقیق‌تر و کندتر)
+whisper_model: "base"        # tiny | base | small | medium (بزرگ‌تر = دقیق‌تر ولی کندتر)
 show_credit: true            # اسم استریمر روی ویدیو (برای رعایت حق کپی‌رایت مهمه)
 
 # ---- هوش مصنوعی (Claude) ----

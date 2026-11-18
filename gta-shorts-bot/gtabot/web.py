@@ -27,6 +27,8 @@ class Panel:
     def __init__(self):
         self.bot = None
         self.job = ""  # text of the running "process VOD" job
+        self.local = True  # panel runs on the user's own computer (not a remote server)
+        self.yt_login_running = False
         self.lock = threading.Lock()
 
     # --- persistent panel state (autostart after a restart) -------------
@@ -159,6 +161,7 @@ class Panel:
         live = list(self.bot.recorders.keys()) if self.bot else []
         return {
             "running": bool(self.bot and self.bot.running), "recording_now": live, "job": self.job,
+            "local": self.local,
             "checks": {
                 "ffmpeg": bool(shutil.which("ffmpeg")),
                 "facecams": [f.name for f in cfg.facecams()],
@@ -169,6 +172,24 @@ class Panel:
             "uploads24h": db.uploads_last_24h(),
             "clips": clips, "longs": longs, "recordings": recs, "settings": self.settings(),
         }
+
+    def youtube_login_local(self) -> None:
+        """On a PC: open the Google login in the default browser and wait for it to finish."""
+        if self.yt_login_running:
+            return
+        if not youtube.CLIENT_SECRET.exists():
+            raise FileNotFoundError("Upload client_secret.json first")
+
+        def work():
+            self.yt_login_running = True
+            try:
+                name = youtube.login()
+                log.info("✅ YouTube connected: %s", name)
+            except Exception as e:  # noqa: BLE001
+                log.error("YouTube login failed: %s", e)
+            finally:
+                self.yt_login_running = False
+        threading.Thread(target=work, daemon=True).start()
 
     def set_clip_status(self, kind: str, cid: int, status: str) -> None:
         from .db import DB
@@ -288,6 +309,8 @@ class Handler(BaseHTTPRequestHandler):
             elif u.path == "/api/delete-facecam":
                 name = Path(self._body_json()["name"]).name
                 (ROOT / "assets" / name).unlink(missing_ok=True)
+            elif u.path == "/api/yt/local":
+                PANEL.youtube_login_local()
             elif u.path == "/api/yt/url":
                 return self._json({"url": youtube.remote_login_url()})
             elif u.path == "/api/yt/finish":
@@ -328,7 +351,24 @@ class Handler(BaseHTTPRequestHandler):
         return {"ok": True, "saved": dest.name}
 
 
+def _uploader() -> None:
+    """Uploads finished videos one by one (respecting the daily limit), even when the live bot is off."""
+    import time as _t
+    from .db import DB
+    from .pipeline import tick_upload
+    while True:
+        try:
+            if not (PANEL.bot and PANEL.bot.running):  # the running bot has its own upload loop
+                cfg = load_config()
+                tick_upload(cfg, DB(cfg.data / "bot.db"))
+        except Exception:  # noqa: BLE001
+            log.exception("uploader")
+        _t.sleep(60)
+
+
 def serve(host: str = "127.0.0.1", port: int = 8080) -> None:
+    PANEL.local = host in ("127.0.0.1", "localhost")
+    threading.Thread(target=_uploader, daemon=True, name="uploader").start()
     if PANEL._state().get("autostart"):
         log.info("Bot was running before the restart - starting it again")
         try:
@@ -379,6 +419,14 @@ a{color:var(--acc)}
   <div id="job" class="mute" style="margin-top:8px"></div>
 </div>
 
+<div class="card" style="border-color:var(--acc)">
+  <h2>🔗 ساخت شورت از لینک یوتیوب / توییچ / کیک</h2>
+  <p class="mute">لینک یه ویدیوی GTA 6 رو بذار. خودش دانلود می‌کنه، بهترین لحظه‌ها رو پیدا می‌کنه، ویدیوی تو رو زیرش می‌ذاره و شورت می‌سازه. اگه یوتیوب وصل باشه، یکی‌یکی آپلود می‌کنه.</p>
+  <input id="vod" placeholder="https://www.youtube.com/watch?v=...">
+  <div style="margin-top:8px"><button class="big" onclick="processVod()">🎬 ساخت شورت</button></div>
+  <div id="vodMsg" class="mute" style="margin-top:6px"></div>
+</div>
+
 <div class="card">
   <h2>✅ چک‌لیست راه‌اندازی</h2>
   <ul class="list" id="checks"></ul>
@@ -398,7 +446,7 @@ a{color:var(--acc)}
   <input type="file" id="csFile" accept=".json,application/json">
   <div style="margin-top:8px"><button class="sec" onclick="upCS()">آپلود فایل</button> <span id="csMsg" class="mute"></span></div>
   <label>۲) دکمه زیر رو بزن، با اکانت یوتیوبت وارد شو و اجازه بده</label>
-  <button onclick="ytStart()">اتصال به یوتیوب</button>
+  <button onclick="ytStart()">اتصال به یوتیوب</button> <div id="ytMsg2" class="mute"></div>
   <div id="ytStep" style="display:none">
     <p class="mute">بعد از اجازه دادن، صفحه‌ای باز می‌شه که «باز نمی‌شه / This site can't be reached». <b>عادیه.</b> آدرس اون صفحه (که با http://localhost:8090 شروع می‌شه) رو کامل کپی کن و اینجا بذار:</p>
     <input id="ytPaste" placeholder="http://localhost:8090/?code=...">
@@ -437,12 +485,6 @@ a{color:var(--acc)}
 </div>
 
 <div class="card">
-  <h2>🧪 ساخت شورت از یه ویدیوی ضبط‌شده (تست)</h2>
-  <input id="vod" placeholder="https://www.twitch.tv/videos/... یا لینک یوتیوب/کیک">
-  <div style="margin-top:8px"><button class="sec" onclick="processVod()">شروع</button> <span id="vodMsg" class="mute"></span></div>
-</div>
-
-<div class="card">
   <h2>🎬 شورت‌های ساخته‌شده</h2>
   <div class="mute" id="upl"></div>
   <div class="clips" id="clips"></div>
@@ -474,7 +516,7 @@ async function refresh(){
   const c=S.checks, it=(ok,t,h)=>`<li class="${ok?'ok':'bad'}">${ok?'✅':'❌'} ${t}${ok||!h?'':' <span class="mute">('+h+')</span>'}</li>`;
   $('checks').innerHTML=it(c.ffmpeg,'FFmpeg نصبه','باید نصب بشه')+
     it(c.facecams.length,'ویدیوی خودت','بخش پایین، آپلود کن')+
-    it(c.claude,'Claude وصله','اختیاری ولی خیلی بهتره: bash claude.sh')+
+    it(c.claude,'Claude وصله','اختیاری ولی خیلی بهتره: '+(S.local?'claude_pro_login.bat':'bash claude.sh'))+
     it(c.client_secret,'فایل client_secret.json','بخش یوتیوب')+
     it(c.youtube,'یوتیوب وصله','بخش یوتیوب');
   $('faces').innerHTML=c.facecams.length?('ویدیوهای فعلی: '+c.facecams.map(f=>`${esc(f)} <a href="#" onclick="delFace('${esc(f)}');return false">حذف</a>`).join('، ')):'هنوز ویدیویی نذاشتی.';
@@ -505,7 +547,9 @@ async function upload(kind,inp,msg){
 function upFace(){ upload('facecam','faceFile','faceMsg') }
 function upCS(){ upload('client_secret','csFile','csMsg') }
 async function delFace(n){ if(confirm('حذف '+n+'؟')){ await api('/api/delete-facecam',{name:n}); refresh(); } }
-async function ytStart(){ try{ const j=await api('/api/yt/url'); $('ytStep').style.display='block'; window.open(j.url,'_blank'); }catch(e){ alert(e.message) } }
+async function ytStart(){ try{
+  if(S && S.local){ await api('/api/yt/local'); $('ytMsg2').textContent='یه صفحه گوگل توی مرورگرت باز شد. وارد اکانت یوتیوبت شو و Allow / Continue رو بزن. بعدش اینجا ✅ می‌شه.'; return; }
+  const j=await api('/api/yt/url'); $('ytStep').style.display='block'; window.open(j.url,'_blank'); }catch(e){ alert(e.message) } }
 async function ytFinish(){ $('ytMsg').textContent='...'; try{ const j=await api('/api/yt/finish',{pasted:$('ytPaste').value}); $('ytMsg').textContent='✅ وصل شد: '+j.channel; refresh(); }catch(e){ $('ytMsg').textContent='❌ '+e.message } }
 async function saveSettings(){
   const keys={}; for(const k of ['ANTHROPIC_API_KEY','CLAUDE_CODE_OAUTH_TOKEN','TWITCH_CLIENT_ID','TWITCH_CLIENT_SECRET','KICK_CLIENT_ID','KICK_CLIENT_SECRET']){ keys[k]=$('key_'+k).value; $('key_'+k).value=''; }

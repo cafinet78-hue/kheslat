@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import logging
 import time
 from pathlib import Path
@@ -62,7 +63,7 @@ def find_candidates(cfg: Config, window: Path, win_start: float, chat: list, n: 
     if counts.sum() > 20:
         score = 0.8 * score + 1.5 * _z(_smooth(counts, 5))
     # Pick peaks with minimum spacing
-    sep = max(cfg.clip_max_seconds, 40)
+    sep = max(cfg.clip_min_seconds, 45)  # two moments this far apart can be two shorts
     order = np.argsort(-score)
     peaks: list[int] = []
     for i in order:
@@ -130,8 +131,8 @@ def _make_clips(cfg, db, ai, rec, window: Path, t0: float, max_clips: int) -> in
         span = c["end"] - c["start"]
         c["frames"] = [f for f in (frame(window, c["start"] + span * r, fdir / f"c{c['id']}_{i}.jpg", 512)
                                    for i, r in enumerate((0.3, 0.6, 0.85))) if f]
-        c["words"] = transcribe(window, c["start"], span, cfg.whisper_model) \
-            if (cfg.captions or ai.enabled) else []
+        # speech is only needed up front when Claude chooses; otherwise transcribe just the picks (faster)
+        c["words"] = transcribe(window, c["start"], span, cfg.whisper_model) if ai.enabled else []
         c["transcript"] = words_text(c["words"])
     picks = ai.select_clips(cands, rec["channel"], rec["title"] or "", max_clips)
     by_id = {c["id"]: c for c in cands}
@@ -147,6 +148,8 @@ def _make_clips(cfg, db, ai, rec, window: Path, t0: float, max_clips: int) -> in
         n = db.q("SELECT COUNT(*) c FROM clips")[0]["c"] + 1
         base = out_dir / f"short_{n:04d}"
         words = by_id.get(p["candidate_id"], {}).get("words", [])
+        if cfg.captions and not words:
+            words = transcribe(window, p["start"], p["end"] - p["start"], cfg.whisper_model)
         face = cfg.facecam_for(n)
         try:
             short = editor.render_short(cfg, window, p["start"], p["end"], base.with_suffix(".mp4"),
@@ -222,7 +225,19 @@ def _credit_line(meta: dict) -> str:
     return f"🎮 Gameplay: {meta.get('streamer')} - {meta.get('url')}"
 
 
+_upload_lock = threading.Lock()
+
+
 def tick_upload(cfg: Config, db: DB) -> None:
+    if not _upload_lock.acquire(blocking=False):
+        return  # another upload is running
+    try:
+        _tick_upload(cfg, db)
+    finally:
+        _upload_lock.release()
+
+
+def _tick_upload(cfg: Config, db: DB) -> None:
     yc = cfg.youtube
     if not yc.get("enabled") or not youtube.is_ready():
         return
@@ -279,7 +294,7 @@ def import_vod(cfg: Config, db: DB, source: str, channel: str | None = None) -> 
     if source.startswith("http"):
         log.info("Downloading %s ...", source)
         tpl = str(vods / "%(uploader)s_%(id)s.%(ext)s")
-        r = subprocess.run([sys.executable, "-m", "yt_dlp", "-f", "bv*[height<=1080]+ba/b",
+        r = subprocess.run([sys.executable, "-m", "yt_dlp", "-f", "bv*[height<=1080]+ba/b", "-N", "8",
                             "--merge-output-format", "mp4", "-o", tpl, "--print", "after_move:filepath",
                             "--print", "before_dl:%(uploader)s|%(title)s", source],
                            capture_output=True, text=True, encoding="utf-8", errors="replace")

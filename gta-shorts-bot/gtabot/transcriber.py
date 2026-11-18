@@ -38,7 +38,7 @@ def transcribe(path: Path, start: float, dur: float, model_name: str = "small") 
             model = _load(model_name)
             with tempfile.TemporaryDirectory() as td:
                 wav = extract_wav(path, start, dur, Path(td) / "a.wav")
-                segs, _ = model.transcribe(str(wav), word_timestamps=True, vad_filter=True)
+                segs, _ = model.transcribe(str(wav), word_timestamps=True, vad_filter=True, beam_size=1)
                 words = []
                 for s in segs:
                     for w in s.words or []:

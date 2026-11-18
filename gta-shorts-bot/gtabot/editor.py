@@ -5,13 +5,26 @@ import logging
 from pathlib import Path
 
 from .config import Config
-from .media import concat, duration, has_audio, run
+from .media import concat, duration, has_audio, probe, run
 
 log = logging.getLogger("editor")
 
 W, H = 1080, 1920
 ENC = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", "30",
        "-c:a", "aac", "-b:a", "160k", "-ar", "48000", "-ac", "2", "-movflags", "+faststart"]
+
+
+def is_portrait(video: Path) -> bool:
+    for s in probe(video).get("streams", []):
+        if s.get("codec_type") == "video":
+            w, h = s.get("width", 0), s.get("height", 0)
+            rot = abs(int((s.get("tags") or {}).get("rotate", 0) or 0))
+            for sd in s.get("side_data_list") or []:
+                rot = abs(int(sd.get("rotation", rot) or 0))
+            if rot in (90, 270):
+                w, h = h, w
+            return h > w
+    return False
 
 
 def _esc(text: str) -> str:
@@ -84,8 +97,17 @@ def render_short(cfg: Config, src: Path, start: float, end: float, out: Path, wo
     if use_face:
         fdur = duration(face) or 1
         inputs += ["-stream_loop", "-1", "-ss", f"{facecam_offset % fdur:.2f}", "-i", str(face.resolve())]
-        vf = (f"[0:v]scale=-2:{int(top_h * zoom) // 2 * 2},crop={W}:{top_h},setsar=1[top];"
-              f"[1:v]scale={W}:{bot_h}:force_original_aspect_ratio=increase,crop={W}:{bot_h},setsar=1[bot];"
+        if is_portrait(face):
+            # phone selfie video: show (almost) the whole face, blurred copy fills the sides
+            fg_h = int(bot_h * 1.25) // 2 * 2
+            bot = (f"[1:v]split[fa][fb];[fa]scale={W}:{bot_h}:force_original_aspect_ratio=increase,"
+                   f"crop={W}:{bot_h},boxblur=20:4,eq=brightness=-0.12[fbg];"
+                   f"[fb]scale=-2:{fg_h},crop=iw:{bot_h}:0:(ih-oh)*0.15[ffg];"
+                   f"[fbg][ffg]overlay=(W-w)/2:0,setsar=1[bot];")
+        else:
+            bot = (f"[1:v]scale={W}:{bot_h}:force_original_aspect_ratio=increase,"
+                   f"crop={W}:{bot_h}:(iw-ow)/2:(ih-oh)*0.3,setsar=1[bot];")
+        vf = (f"[0:v]scale=-2:{int(top_h * zoom) // 2 * 2},crop={W}:{top_h},setsar=1[top];" + bot +
               f"[top][bot]vstack=inputs=2,fps=30,subtitles={ass.name}[v]")
     else:  # no facecam: blurred background + centered gameplay
         vf = (f"[0:v]split[a][b];[a]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},"
@@ -114,8 +136,8 @@ def render_wide(cfg: Config, src: Path, start: float, end: float, out: Path, cre
     if use_face:
         fdur = duration(face) or 1
         inputs += ["-stream_loop", "-1", "-ss", f"{facecam_offset % fdur:.2f}", "-i", str(face.resolve())]
-        vf = (base + ";[1:v]scale=480:270:force_original_aspect_ratio=increase,crop=480:270,"
-              "pad=488:278:4:4:white[f];[g][f]overlay=W-w-30:H-h-30,fps=30,"
+        vf = (base + ";[1:v]scale=330:420:force_original_aspect_ratio=increase,crop=330:420:(iw-ow)/2:(ih-oh)*0.3,"
+              "pad=338:428:4:4:white[f];[g][f]overlay=W-w-30:H-h-30,fps=30,"
               f"subtitles={ass.name}[v]")
     else:
         vf = base + f";[g]fps=30,subtitles={ass.name}[v]"
