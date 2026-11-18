@@ -8,7 +8,7 @@ A Python app (`gtabot/`) that records GTA VI live streams, detects highlights, e
 
 ## Run
 - `venv\Scripts\python -m gtabot doctor`: checks dependencies and config (start here when debugging)
-- `... run`: main loop. `... process <url|file>`: one-off test on a VOD. `... status`: list outputs.
+- `... web`: phone control panel (port 8080; Codespaces config in `.devcontainer/gta-shorts-bot`). `... run`: main loop. `... process <url|file>`: one-off test on a VOD. `... status`: list outputs.
 - Logs: `data/bot.log`. State: `data/bot.db` (SQLite: recordings, clips, long_videos).
 
 ## Flow / files

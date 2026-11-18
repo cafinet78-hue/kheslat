@@ -149,6 +149,11 @@ def cmd_status(_args) -> None:
     print(f"\nUploads in last 24h: {db.uploads_last_24h()}\n")
 
 
+def cmd_web(args) -> None:
+    from .web import serve
+    serve(args.host, args.port)
+
+
 def main() -> None:
     if sys.platform == "win32":
         try:
@@ -167,6 +172,10 @@ def main() -> None:
     sp.add_argument("--channel", help="streamer name for credit")
     sp.add_argument("--upload", action="store_true", help="also upload one video now")
     sp.set_defaults(fn=cmd_process)
+    sw = sub.add_parser("web", help="mobile control panel (start/stop, settings, clips)")
+    sw.add_argument("--host", default="127.0.0.1")
+    sw.add_argument("--port", type=int, default=8080)
+    sw.set_defaults(fn=cmd_web)
     sub.add_parser("upload", help="upload the next pending video now").set_defaults(fn=cmd_upload)
     sub.add_parser("status", help="list made / uploaded videos").set_defaults(fn=cmd_status)
     args = p.parse_args()

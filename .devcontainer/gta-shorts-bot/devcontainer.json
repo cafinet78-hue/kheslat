@@ -1,0 +1,14 @@
+{
+  "name": "GTA 6 Shorts Bot",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+  "hostRequirements": { "cpus": 2 },
+  "postCreateCommand": "bash gta-shorts-bot/codespace/setup.sh",
+  "postStartCommand": "bash gta-shorts-bot/codespace/start.sh",
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "Control Panel", "onAutoForward": "openBrowser" }
+  },
+  "customizations": {
+    "codespaces": { "openFiles": ["gta-shorts-bot/README.md"] }
+  }
+}

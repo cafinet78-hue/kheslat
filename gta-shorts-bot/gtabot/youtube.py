@@ -43,6 +43,42 @@ def login() -> str:
     return items[0]["snippet"]["title"] if items else "(no channel found on this account)"
 
 
+# --- Login from a phone / remote server (no local browser) ---------------
+# Google sends you back to http://localhost:8090/?code=... which won't load on a phone:
+# that's expected. You copy that address and paste it into the panel.
+_pending_flow = None
+REMOTE_REDIRECT = "http://localhost:8090/"
+
+
+def remote_login_url() -> str:
+    global _pending_flow
+    import os
+    from google_auth_oauthlib.flow import Flow
+    if not CLIENT_SECRET.exists():
+        raise FileNotFoundError("Upload client_secret.json first")
+    os.environ["OAUTHLIB_RELAX_TOKEN_SCOPE"] = "1"
+    _pending_flow = Flow.from_client_secrets_file(str(CLIENT_SECRET), SCOPES, redirect_uri=REMOTE_REDIRECT)
+    url, _ = _pending_flow.authorization_url(access_type="offline", prompt="consent")
+    return url
+
+
+def remote_login_finish(pasted: str) -> str:
+    import os
+    from urllib.parse import parse_qs, urlparse
+    if _pending_flow is None:
+        raise RuntimeError("Press 'Connect YouTube' again first")
+    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"  # localhost redirect is http
+    pasted = pasted.strip()
+    code = parse_qs(urlparse(pasted).query).get("code", [None])[0] if pasted.startswith("http") else pasted
+    if not code:
+        raise ValueError("No code found in what you pasted")
+    _pending_flow.fetch_token(code=code)
+    TOKEN.write_text(_pending_flow.credentials.to_json(), encoding="utf-8")
+    yt = _service(_pending_flow.credentials)
+    items = yt.channels().list(part="snippet", mine=True).execute().get("items") or []
+    return items[0]["snippet"]["title"] if items else "(no channel on this account)"
+
+
 def _service(creds):
     from googleapiclient.discovery import build
     return build("youtube", "v3", credentials=creds, cache_discovery=False)

@@ -28,23 +28,35 @@ class Bot:
         self.db.x("UPDATE recordings SET status='ended' WHERE status='recording'")
 
     # ------------------------------------------------------------------
-    def run(self) -> None:
+    def start(self) -> None:
         threads = [threading.Thread(target=self._loop, args=(self._discover, self.cfg.check_interval_minutes * 60),
                                     daemon=True, name="discover"),
                    threading.Thread(target=self._loop, args=(self._process, 30), daemon=True, name="process"),
                    threading.Thread(target=self._loop, args=(self._upload, 60), daemon=True, name="upload")]
         for t in threads:
             t.start()
-        log.info("🚀 Bot is running. Press Ctrl+C to stop.")
+        log.info("🚀 Bot is running.")
+
+    def stop(self) -> None:
+        log.info("Stopping... (recordings so far will be processed on next start)")
+        self._stop.set()
+        for rec, rid in self.recorders.values():
+            rec.stop()
+            self.db.x("UPDATE recordings SET status='ended' WHERE id=?", (rid,))
+        self.recorders.clear()
+
+    @property
+    def running(self) -> bool:
+        return not self._stop.is_set()
+
+    def run(self) -> None:
+        self.start()
+        log.info("Press Ctrl+C to stop.")
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            log.info("Stopping... (finishing current recordings)")
-            self._stop.set()
-            for rec, rid in self.recorders.values():
-                rec.stop()
-                self.db.x("UPDATE recordings SET status='ended' WHERE id=?", (rid,))
+            self.stop()
 
     def _loop(self, fn, every: float) -> None:
         while not self._stop.is_set():
@@ -65,6 +77,8 @@ class Bot:
         if free <= 0:
             return
         live = find_live_streams(self.cfg)
+        if self._stop.is_set():  # stopped while we were searching
+            return
         log.info("Live GTA VI streams found: %s",
                  ", ".join(f"{s.channel}({s.platform})" for s in live) or "none")
         for s in live:
